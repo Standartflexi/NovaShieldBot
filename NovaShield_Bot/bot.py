@@ -248,8 +248,31 @@ async def db_get_all_active_not_expired() -> Dict[str, Dict[str, Any]]:
 
 
 # ---------------- Discord ----------------
-intents = discord.Intents.none()
+intents = discord.Intents.default()
+intents.message_content = False  # kein Zugriff auf Nachrichteninhalte nötig
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+
+async def require_guild_access(guild_id: int):
+    """Stellt sicher, dass der Bot Zugriff auf die konfigurierte Guild hat.
+
+    Discord-Fehler wie "Missing Access" (50001) sind für User schwer zu
+    verstehen. Wir stoppen den Start frühzeitig mit einer klaren Anleitung,
+    falls der Bot nicht korrekt eingeladen wurde oder die guild_id falsch ist.
+    """
+
+    try:
+        guild = bot.get_guild(guild_id) or await bot.fetch_guild(guild_id)
+    except discord.Forbidden:
+        raise SystemExit(
+            "Bot hat keinen Zugriff auf die konfigurierte guild_id. "
+            "Bitte Bot erneut mit dem Scope 'applications.commands' (Slash Commands) "
+            "und 'bot' einladen und die guild_id in config.json prüfen."
+        )
+    except discord.HTTPException as exc:
+        raise SystemExit(f"Guild {guild_id} konnte nicht geladen werden: {exc}")
+
+    return guild
 
 
 async def log_to_channel(text: str):
@@ -279,6 +302,15 @@ async def sync_slash_commands(guild_id: int) -> str:
 @bot.event
 async def on_ready():
     print(f"✅ Bot online als {bot.user}")
+
+    try:
+        await require_guild_access(GUILD_ID)
+    except SystemExit as exc:
+        # Stoppe den Bot mit einer klaren Meldung, falls er keine Rechte hat.
+        print(exc)
+        await bot.close()
+        return
+
     msg = await sync_slash_commands(GUILD_ID)
     print(msg)
 
