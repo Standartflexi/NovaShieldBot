@@ -111,7 +111,9 @@ def save_db(db: Dict[str, Any]) -> None:
 
 
 # ---------------- DB functions (JSON) ----------------
-async def db_create_license(license_key: str, kunden_id: str, ndc: str, duration_input: str, duration_seconds: int):
+async def db_create_license(
+    license_key: str, kunden_id: str, role_id: Optional[int], duration_input: str, duration_seconds: int
+):
     created_at = now_unix()
     expires_at = created_at + duration_seconds
 
@@ -122,7 +124,7 @@ async def db_create_license(license_key: str, kunden_id: str, ndc: str, duration
 
         db["licenses"][license_key] = {
             "kunden_id": kunden_id,
-            "ndc": ndc,
+            "role_id": role_id,
             "created_at": created_at,
             "duration_input": duration_input,
             "duration_seconds": duration_seconds,
@@ -324,8 +326,10 @@ group = app_commands.Group(name="lizenz", description="Lizenz Verwaltung")
 
 
 @group.command(name="erstellen", description="Erstellt eine Lizenz")
-@app_commands.describe(dauer="z.B. 30d, 12h, 15m", kunden_id="Discord User ID", ndc="nDC Wert")
-async def lizenz_erstellen(interaction: discord.Interaction, dauer: str, kunden_id: str, ndc: str):
+@app_commands.describe(
+    dauer="z.B. 30d, 12h, 15m", kunden_id="Discord User ID", rolle="Rolle, die der Kunde erhalten soll"
+)
+async def lizenz_erstellen(interaction: discord.Interaction, dauer: str, kunden_id: str, rolle: discord.Role):
     if not interaction.user.guild_permissions.administrator:
         return await interaction.response.send_message("❌ Keine Rechte (Admin benötigt).", ephemeral=True)
 
@@ -334,18 +338,51 @@ async def lizenz_erstellen(interaction: discord.Interaction, dauer: str, kunden_
         return await interaction.response.send_message("❌ Ungültige Dauer. Beispiele: `30d`, `12h`, `15m`", ephemeral=True)
 
     license_key = make_license_key()
-    created_at, expires_at = await db_create_license(license_key, kunden_id, ndc, dauer, duration_seconds)
+    created_at, expires_at = await db_create_license(license_key, kunden_id, rolle.id, dauer, duration_seconds)
+
+    member = None
+    try:
+        member = interaction.guild and interaction.guild.get_member(int(kunden_id))
+    except ValueError:
+        member = None
+
+    if not member and interaction.guild:
+        try:
+            member = await interaction.guild.fetch_member(int(kunden_id))
+        except Exception:
+            member = None
 
     await interaction.response.send_message(
         "✅ Lizenz erstellt\n"
         f"**Lizenz:** `{license_key}`\n"
         f"**Kunden (Discord ID):** `{kunden_id}`\n"
-        f"**nDC:** `{ndc}`\n"
+        f"**Rolle:** {rolle.mention}\n"
         f"**Dauer:** `{dauer}`\n"
         f"**Gültig bis:** <t:{expires_at}:F>\n"
         f"**IP/Port-Bind:** beim ersten Heartbeat",
         ephemeral=True,
     )
+
+    if member:
+        try:
+            await member.add_roles(rolle, reason="Lizenz erstellt")
+        except Exception:
+            await log_to_channel(
+                f"⚠️ Rolle `{rolle.name}` konnte nicht vergeben werden an `{kunden_id}` (Lizenz `{license_key}`)."
+            )
+
+    try:
+        user = await bot.fetch_user(int(kunden_id))
+        await user.send(
+            "✅ **Deine NovaShield Lizenz**\n"
+            f"Lizenz-Key: `{license_key}`\n"
+            f"Gültig bis: <t:{expires_at}:F>\n"
+            "Danke für dein Vertrauen!"
+        )
+    except Exception:
+        await log_to_channel(
+            f"⚠️ Lizenz konnte nicht per DM zugestellt werden an Kunden `{kunden_id}` (Lizenz `{license_key}`)."
+        )
 
 
 bot.tree.add_command(group)
@@ -403,11 +440,14 @@ async def lizenzstatus(interaction: discord.Interaction, lizenz: Optional[str] =
     else:
         where = "Keine Aktivierungsdaten (Server hat noch keinen Heartbeat gesendet)."
 
+    role_id = lic.get("role_id")
+    role_txt = f"<@&{role_id}>" if role_id else "-"
+
     await interaction.response.send_message(
         "**Lizenzstatus**\n"
         f"**Lizenz:** `{lic['license_key']}`\n"
         f"**Kunden (Discord ID):** `{lic['kunden_id']}`\n"
-        f"**nDC:** `{lic['ndc']}`\n"
+        f"**Rolle:** {role_txt}\n"
         f"**Dauer:** `{lic.get('duration_input')}`\n"
         f"**Ablauf:** <t:{int(lic['expires_at'])}:F>\n"
         f"**Status:** {status_txt}\n"
