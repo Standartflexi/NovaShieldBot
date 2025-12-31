@@ -26,7 +26,7 @@ DISCORD_TOKEN = CFG["discord_token"]
 GUILD_ID = int(CFG["guild_id"])
 LOG_CHANNEL_ID = int(CFG["log_channel_id"])
 
-API_HOST = CFG["api"]["host"]
+API_HOST = CFG["api"].get("host") or "0.0.0.0"
 API_PORT = int(CFG["api"]["port"])
 API_SECRET = CFG["api"]["secret"]
 TRUST_X_FORWARDED_FOR = bool(CFG["api"].get("trust_x_forwarded_for", False))
@@ -517,9 +517,25 @@ async def start_api():
 
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, API_HOST, API_PORT)
-    await site.start()
-    print(f"✅ API läuft auf http://{API_HOST}:{API_PORT}")
+    bind_host = API_HOST
+    try:
+        site = web.TCPSite(runner, bind_host, API_PORT)
+        await site.start()
+        print(f"✅ API läuft auf http://{bind_host}:{API_PORT}")
+    except OSError as exc:
+        fallback_host = "0.0.0.0"
+        if bind_host == fallback_host:
+            await runner.cleanup()
+            raise
+
+        print(
+            f"⚠️ API Start fehlgeschlagen auf {bind_host}:{API_PORT} ({exc}). "
+            f"Versuche stattdessen {fallback_host}..."
+        )
+
+        site = web.TCPSite(runner, fallback_host, API_PORT)
+        await site.start()
+        print(f"✅ API läuft auf http://{fallback_host}:{API_PORT}")
 
 
 # ---------------- Main ----------------
