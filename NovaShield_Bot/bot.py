@@ -249,16 +249,22 @@ async def log_to_channel(text: str):
         pass
 
 
+async def sync_slash_commands(guild_id: int) -> str:
+    guild = discord.Object(id=guild_id)
+
+    try:
+        bot.tree.copy_global_to(guild=guild)
+        synced = await bot.tree.sync(guild=guild)
+        return f"✅ Slash Commands synchronisiert ({len(synced)} Befehle)."
+    except Exception as exc:  # pragma: no cover - only logs in production
+        return f"⚠️ Sync Fehler: {exc}"
+
+
 @bot.event
 async def on_ready():
     print(f"✅ Bot online als {bot.user}")
-    try:
-        guild = discord.Object(id=GUILD_ID)
-        bot.tree.copy_global_to(guild=guild)
-        await bot.tree.sync(guild=guild)
-        print("✅ Slash Commands (Guild) synchronisiert.")
-    except Exception as e:
-        print("⚠️ Sync Fehler:", e)
+    msg = await sync_slash_commands(GUILD_ID)
+    print(msg)
 
     if not getattr(bot, "_reminder_started", False):
         bot._reminder_started = True
@@ -295,6 +301,16 @@ async def lizenz_erstellen(interaction: discord.Interaction, dauer: str, kunden_
 
 
 bot.tree.add_command(group)
+
+
+@bot.tree.command(name="sync", description="Synchronisiert die Slash Commands im Server")
+async def sync_commands(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("❌ Keine Rechte (Admin benötigt).", ephemeral=True)
+
+    await interaction.response.defer(ephemeral=True)
+    msg = await sync_slash_commands(GUILD_ID)
+    await interaction.followup.send(msg, ephemeral=True)
 
 
 @bot.tree.command(name="lizenzstatus", description="Prüft wo eine Lizenz aktuell aktiv ist")
