@@ -258,6 +258,30 @@ intents.message_content = False  # kein Zugriff auf Nachrichteninhalte nötig
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """Sende eine freundliche Fehlermeldung statt eines Timeouts."""
+
+    original = getattr(error, "original", error)
+    error_name = original.__class__.__name__
+    error_text = f"❌ Ein unerwarteter Fehler ist aufgetreten ({error_name}). Bitte versuche es erneut oder melde dich beim Admin."
+
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(error_text, ephemeral=True)
+        else:
+            await interaction.response.send_message(error_text, ephemeral=True)
+    except Exception:
+        pass
+
+    try:
+        await log_to_channel(
+            f"❌ Fehler bei Command `{interaction.command}` von `{interaction.user}`: {original!r}"
+        )
+    except Exception:
+        pass
+
+
 async def require_guild_access(guild_id: int):
     """Stellt sicher, dass der Bot Zugriff auf die konfigurierte Guild hat.
 
