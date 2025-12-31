@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import secrets
+import string
 import time
 from typing import Optional, Dict, Any
 
@@ -58,7 +59,9 @@ def now_unix() -> int:
 
 
 def make_license_key() -> str:
-    return secrets.token_hex(16)  # 32 hex chars
+    chars = string.ascii_uppercase
+    groups = ["".join(secrets.choice(chars) for _ in range(4)) for _ in range(4)]
+    return "-".join(groups)
 
 
 def parse_duration_to_seconds(inp: str) -> Optional[int]:
@@ -376,6 +379,7 @@ async def lizenz_erstellen(interaction: discord.Interaction, dauer: str, kunden_
         await user.send(
             "✅ **Deine NovaShield Lizenz**\n"
             f"Lizenz-Key: `{license_key}`\n"
+            f"Laufzeit: `{dauer}`\n"
             f"Gültig bis: <t:{expires_at}:F>\n"
             "Danke für dein Vertrauen!"
         )
