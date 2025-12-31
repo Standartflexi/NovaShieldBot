@@ -450,52 +450,12 @@ async def handle_heartbeat(request: web.Request) -> web.Response:
     if lic["status"] == "suspended":
         return web.json_response({"ok": False, "error": "license_suspended"}, status=403)
 
-    payload_ip = str(data.get("server_ip") or "unknown")
-    payload_port = str(data.get("server_port") or "unknown")
+    payload_ip = data.get("server_ip")
+    payload_port = data.get("server_port")
     server_name = data.get("server_name")
     resource_name = data.get("resource_name")
     reporter_ip = get_reporter_ip(request)
 
-    locked = lic.get("locked") or {"ip": None, "port": None}
-
-    # 1) Lock on first heartbeat
-    if not locked.get("ip") and payload_ip != "unknown" and payload_port != "unknown":
-        await db_lock_license(license_key, payload_ip, payload_port)
-        await log_to_channel(
-            "🔒 **Lizenz gelockt**\n"
-            f"License `{license_key}` → `{payload_ip}:{payload_port}`\n"
-            f"Server: `{server_name or 'unbekannt'}` Resource: `{resource_name or 'unbekannt'}`"
-        )
-        lic = await db_get_license(license_key) or lic
-        locked = lic.get("locked") or locked
-
-    # 2) Enforce lock
-    if locked.get("ip") and locked.get("port"):
-        if payload_ip != locked["ip"] or payload_port != locked["port"]:
-            strikes = await db_add_strike(license_key)
-
-            await log_to_channel(
-                "🚨 **Lizenz Missbrauch erkannt**\n"
-                f"License `{license_key}`\n"
-                f"Locked: `{locked['ip']}:{locked['port']}`\n"
-                f"Got: `{payload_ip}:{payload_port}` ReporterIP: `{reporter_ip or 'unbekannt'}`\n"
-                f"Server: `{server_name or 'unbekannt'}` Resource: `{resource_name or 'unbekannt'}`\n"
-                f"Strikes: `{strikes}/{MISUSE_STRIKES_LIMIT}`"
-            )
-
-            if strikes >= MISUSE_STRIKES_LIMIT:
-                reason = f"Auto-suspend: IP/Port mismatch ({strikes} strikes)"
-                await db_suspend_license(license_key, reason)
-                await log_to_channel(
-                    "⛔ **Lizenz automatisch gesperrt**\n"
-                    f"License `{license_key}`\n"
-                    f"Grund: {reason}"
-                )
-                return web.json_response({"ok": False, "error": "license_suspended"}, status=403)
-
-            return web.json_response({"ok": False, "error": "ip_mismatch", "strikes": strikes}, status=403)
-
-    # 3) Save last server data into licens.json
     await db_update_last_server(
         license_key,
         {
