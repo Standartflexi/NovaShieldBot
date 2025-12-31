@@ -1,0 +1,18 @@
+{
+  "discord_token": "",
+  "guild_id": 123456789012345678,
+  "log_channel_id": 123456789012345678,
+
+  "api": {
+    "host": "5.253.246.173",
+    "port": 40120,
+    "secret": "NordGaming.de2025!",
+    "trust_x_forwarded_for": false
+  },
+
+  "license": {
+    "active_window_seconds": 180,
+    "misuse_strikes_limit": 3,
+    "reminder_check_interval_seconds": 600
+  }
+}
