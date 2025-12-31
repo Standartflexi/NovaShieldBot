@@ -99,14 +99,18 @@ db_lock = asyncio.Lock()
 
 
 def ensure_db_exists():
-    if not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
         atomic_write_json(DB_PATH, {"licenses": {}})
 
 
 def load_db() -> Dict[str, Any]:
     ensure_db_exists()
-    with open(DB_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(DB_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        atomic_write_json(DB_PATH, {"licenses": {}})
+        return {"licenses": {}}
 
 
 def save_db(db: Dict[str, Any]) -> None:
