@@ -20,7 +20,23 @@ def load_config() -> Dict[str, Any]:
         return json.load(f)
 
 
+def validate_config(cfg: Dict[str, Any]) -> None:
+    token = (cfg.get("discord_token") or "").strip()
+    if not token:
+        raise SystemExit(
+            "discord_token fehlt in config.json – trage hier den Bot-Token aus dem Discord Developer Portal ein."
+        )
+
+    missing_fields = []
+    for field in ("guild_id", "log_channel_id"):
+        if field not in cfg:
+            missing_fields.append(field)
+    if missing_fields:
+        raise SystemExit(f"Folgende Felder fehlen in config.json: {', '.join(missing_fields)}")
+
+
 CFG = load_config()
+validate_config(CFG)
 
 DISCORD_TOKEN = CFG["discord_token"]
 GUILD_ID = int(CFG["guild_id"])
